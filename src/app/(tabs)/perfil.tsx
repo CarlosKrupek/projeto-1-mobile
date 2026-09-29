@@ -33,7 +33,7 @@ export default function ProfileScreen() {
         <View style={styles.profile}>
           <Image
             source={{
-              uri: "https://i.pravatar.cc/200",
+              uri: "https://i.pinimg.com/736x/fb/7a/2c/fb7a2cb23694e8bbc98a3a7e3e9e07a5.jpg",
             }}
             style={styles.avatar}
           />
