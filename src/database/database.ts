@@ -9,24 +9,23 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   }
 
   const db = await database;
-  // Verifica se a tabela de participantes já existe
+
+  // Verifica a estrutura antiga da tabela de participantes.
   const columns = await db.getAllAsync<{ name: string }>(
     "PRAGMA table_info(combat_monsters)"
   );
 
-  // Verifica se a estrutura antiga não possui participant_id
   const hasParticipantId = columns.some(
     (column) => column.name === "participant_id"
   );
 
-  // Se a tabela existe, mas possui a estrutura antiga,
-  // remove as tabelas de combate para recriá-las.
   if (columns.length > 0 && !hasParticipantId) {
     await db.execAsync(`
       DROP TABLE IF EXISTS combat_monsters;
       DROP TABLE IF EXISTS combats;
     `);
   }
+
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS combats (
       id TEXT PRIMARY KEY NOT NULL,
@@ -48,7 +47,31 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
       position INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (combat_id) REFERENCES combats(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS saved_monsters (
+      id TEXT PRIMARY KEY NOT NULL,
+      source TEXT NOT NULL,
+      name TEXT NOT NULL,
+      data_json TEXT NOT NULL,
+      saved_at TEXT NOT NULL
+    );
   `);
+
+  // Migração: adiciona a coluna sem apagar os monstros existentes.
+  const savedMonsterColumns = await db.getAllAsync<{ name: string }>(
+    "PRAGMA table_info(saved_monsters)"
+  );
+
+  const hasCustomImageUri = savedMonsterColumns.some(
+    (column) => column.name === "custom_image_uri"
+  );
+
+  if (!hasCustomImageUri) {
+    await db.execAsync(`
+      ALTER TABLE saved_monsters
+      ADD COLUMN custom_image_uri TEXT;
+    `);
+  }
 
   return db;
 }

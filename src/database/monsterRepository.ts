@@ -1,7 +1,10 @@
 
 import { getDatabase } from "./database";
-
 import { Monster } from "../types/Monster";
+
+export type SavedMonster = Monster & {
+  customImageUri?: string;
+};
 
 // Salvar uma criatura no SQLite.
 export async function saveMonster(monster: Monster): Promise<void> {
@@ -34,30 +37,39 @@ export async function saveMonster(monster: Monster): Promise<void> {
   );
 }
 
-// Buscar todas as criaturas salvas.
-export async function getSavedMonsters(): Promise<Monster[]> {
+// Buscar todas as criaturas salvas, incluindo suas imagens personalizadas.
+export async function getSavedMonsters(): Promise<SavedMonster[]> {
   const db = await getDatabase();
 
-  const result = await db.getAllAsync<{ data_json: string }>(
+  const result = await db.getAllAsync<{
+    data_json: string;
+    custom_image_uri: string | null;
+  }>(
     `
-      SELECT data_json
+      SELECT data_json, custom_image_uri
       FROM saved_monsters
       ORDER BY saved_at DESC;
     `
   );
 
-  return result.map((item) => JSON.parse(item.data_json) as Monster);
+  return result.map((item) => ({
+    ...(JSON.parse(item.data_json) as Monster),
+    customImageUri: item.custom_image_uri ?? undefined,
+  }));
 }
 
 // Buscar uma criatura específica.
 export async function getSavedMonsterById(
   id: string
-): Promise<Monster | null> {
+): Promise<SavedMonster | null> {
   const db = await getDatabase();
 
-  const result = await db.getFirstAsync<{ data_json: string }>(
+  const result = await db.getFirstAsync<{
+    data_json: string;
+    custom_image_uri: string | null;
+  }>(
     `
-      SELECT data_json
+      SELECT data_json, custom_image_uri
       FROM saved_monsters
       WHERE id = ?;
     `,
@@ -68,7 +80,27 @@ export async function getSavedMonsterById(
     return null;
   }
 
-  return JSON.parse(result.data_json) as Monster;
+  return {
+    ...(JSON.parse(result.data_json) as Monster),
+    customImageUri: result.custom_image_uri ?? undefined,
+  };
+}
+
+// Salvar ou atualizar a imagem personalizada.
+export async function updateCustomMonsterImage(
+  id: string,
+  imageUri: string | null
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `
+      UPDATE saved_monsters
+      SET custom_image_uri = ?
+      WHERE id = ?;
+    `,
+    [imageUri, id]
+  );
 }
 
 // Verificar se uma criatura já está salva.

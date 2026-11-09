@@ -13,15 +13,21 @@ import { Monster } from "../types/Monster";
 
 type CreatureCardProps = {
   creature: Monster;
+  customImageUri?: string;
   onPress: () => void;
   onRemove?: () => void;
+  onChangeImage?: () => void;
 };
 
 export default function CreatureCard({
   creature,
+  customImageUri,
   onPress,
   onRemove,
+  onChangeImage,
 }: CreatureCardProps) {
+  const imageUri = customImageUri || creature.image;
+
   return (
     <View style={styles.cardRow}>
       <Pressable
@@ -29,9 +35,9 @@ export default function CreatureCard({
         onPress={onPress}
         accessibilityRole="button"
       >
-        {creature.image ? (
+        {imageUri ? (
           <Image
-            source={{ uri: creature.image }}
+            source={{ uri: imageUri }}
             style={styles.image}
             resizeMode="cover"
           />
@@ -70,16 +76,29 @@ export default function CreatureCard({
         </View>
       </Pressable>
 
-      {onRemove && (
-        <Pressable
-          style={styles.removeButton}
-          onPress={onRemove}
-          accessibilityRole="button"
-          accessibilityLabel={`Remover ${creature.name}`}
-        >
-          <Text style={styles.removeText}>×</Text>
-        </Pressable>
-      )}
+      <View style={styles.actions}>
+        {onChangeImage && (
+          <Pressable
+            style={styles.actionButton}
+            onPress={onChangeImage}
+            accessibilityRole="button"
+            accessibilityLabel={`Alterar imagem de ${creature.name}`}
+          >
+            <Text style={styles.cameraText}>📷</Text>
+          </Pressable>
+        )}
+
+        {onRemove && (
+          <Pressable
+            style={styles.removeButton}
+            onPress={onRemove}
+            accessibilityRole="button"
+            accessibilityLabel={`Remover ${creature.name}`}
+          >
+            <Text style={styles.removeText}>×</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -159,6 +178,25 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
 
+  actions: {
+    marginLeft: 8,
+    gap: 8,
+    alignItems: "center",
+  },
+
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#292929",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  cameraText: {
+    fontSize: 17,
+  },
+
   removeButton: {
     width: 36,
     height: 36,
@@ -166,7 +204,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#292929",
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 8,
   },
 
   removeText: {
