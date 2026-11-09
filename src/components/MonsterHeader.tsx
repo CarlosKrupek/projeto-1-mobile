@@ -9,7 +9,7 @@ import {
 
 type MonsterHeaderProps = {
   name: string;
-  image: string;
+  image?: string;
   size: string;
   type: string;
   alignment: string;
@@ -34,10 +34,16 @@ export default function MonsterHeader({
         </Text>
       </View>
 
-      <Image
-        source={{ uri: image }}
-        style={styles.image}
-      />
+      {image ? (
+        <Image
+          source={{ uri: image }}
+          style={styles.image}
+        />
+      ) : (
+        <View style={[styles.image, styles.imageFallback]}>
+          <Text style={{ color: "#c9a227" }}>?</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -79,5 +85,11 @@ const styles = StyleSheet.create({
     borderRadius: 42,
     borderWidth: 2,
     borderColor: "#c9a227",
+  },
+
+  imageFallback: {
+  backgroundColor: "#222222",
+  alignItems: "center",
+  justifyContent: "center",
   },
 });

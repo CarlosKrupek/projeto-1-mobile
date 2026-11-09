@@ -1,4 +1,8 @@
-import React from "react";
+
+import React, {
+  useCallback,
+  useState,
+} from "react";
 
 import {
   View,
@@ -7,29 +11,156 @@ import {
   StyleSheet,
   SafeAreaView,
   Pressable,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from "react-native";
 
-import { router } from "expo-router";
+import {
+  router,
+  useFocusEffect,
+} from "expo-router";
 
-import { myMonsters } from "../constants/myMonsters";
+import {
+  getSavedMonsters,
+  removeSavedMonster,
+} from "../database/monsterRepository";
+
+import { Monster } from "../types/Monster";
 
 import CreatureCard from "../components/CreatureCard";
 
 export default function MyMonstersScreen() {
-  const openMonster = (id: string) => {
+  const [monsters, setMonsters] = useState<Monster[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [error, setError] = useState("");
+
+  // Buscar monstros salvos no SQLite.
+  const loadMonsters = useCallback(async () => {
+    try {
+      setError("");
+
+      const savedMonsters = await getSavedMonsters();
+
+      setMonsters(savedMonsters);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível carregar os monstros."
+      );
+    }
+  }, []);
+
+  // Atualizar a tela sempre que ela receber foco.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      async function load() {
+        setLoading(true);
+
+        try {
+          setError("");
+
+          const savedMonsters = await getSavedMonsters();
+
+          if (active) {
+            setMonsters(savedMonsters);
+          }
+        } catch (err) {
+          if (active) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Não foi possível carregar os monstros."
+            );
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
+        }
+      }
+
+      load();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  // Atualizar manualmente.
+  async function refreshMonsters() {
+    try {
+      setRefreshing(true);
+
+      await loadMonsters();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  // Abrir ficha da criatura.
+  function openMonster(id: string) {
     router.push({
       pathname: "/monstros/[id]",
       params: { id },
     });
-  };
+  }
+
+  // Confirmar remoção.
+  function confirmRemove(monster: Monster) {
+    Alert.alert(
+      "Remover criatura",
+      `Deseja remover ${monster.name} de Meus Monstros?`,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Remover",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await removeSavedMonster(monster.id);
+
+              setMonsters((previous) =>
+                previous.filter((item) => item.id !== monster.id)
+              );
+            } catch {
+              Alert.alert(
+                "Erro",
+                "Não foi possível remover a criatura."
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={myMonsters}
+        data={monsters}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshMonsters}
+            tintColor="#c9a227"
+          />
+        }
 
         ListHeaderComponent={
           <View style={styles.header}>
@@ -49,18 +180,56 @@ export default function MyMonstersScreen() {
             <Text style={styles.subtitle}>
               Monstros salvos para suas aventuras
             </Text>
+
+            <Text style={styles.counter}>
+              {monsters.length} criaturas salvas
+            </Text>
           </View>
         }
 
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>
-              Nenhum monstro salvo
-            </Text>
+            {loading ? (
+              <>
+                <ActivityIndicator
+                  size="large"
+                  color="#c9a227"
+                />
 
-            <Text style={styles.emptyText}>
-              Seus monstros salvos aparecerão aqui.
-            </Text>
+                <Text style={styles.emptyText}>
+                  Carregando monstros...
+                </Text>
+              </>
+            ) : error ? (
+              <>
+                <Text style={styles.emptyTitle}>
+                  Erro ao carregar
+                </Text>
+
+                <Text style={styles.emptyText}>
+                  {error}
+                </Text>
+
+                <Pressable
+                  style={styles.retryButton}
+                  onPress={loadMonsters}
+                >
+                  <Text style={styles.retryText}>
+                    Tentar novamente
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>
+                  Nenhum monstro salvo
+                </Text>
+
+                <Text style={styles.emptyText}>
+                  Suas criaturas salvas aparecerão aqui.
+                </Text>
+              </>
+            )}
           </View>
         }
 
@@ -68,6 +237,7 @@ export default function MyMonstersScreen() {
           <CreatureCard
             creature={item}
             onPress={() => openMonster(item.id)}
+            onRemove={() => confirmRemove(item)}
           />
         )}
       />
@@ -84,6 +254,7 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
     paddingBottom: 30,
+    flexGrow: 1,
   },
 
   header: {
@@ -111,6 +282,12 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  counter: {
+    color: "#c9a227",
+    fontSize: 13,
+    marginTop: 12,
+  },
+
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -121,6 +298,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 20,
     fontWeight: "bold",
+    textAlign: "center",
   },
 
   emptyText: {
@@ -128,5 +306,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     textAlign: "center",
+  },
+
+  retryButton: {
+    backgroundColor: "#c9a227",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+
+  retryText: {
+    color: "#0d0d0d",
+    fontWeight: "bold",
   },
 });

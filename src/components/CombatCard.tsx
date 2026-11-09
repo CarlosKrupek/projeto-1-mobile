@@ -7,10 +7,10 @@ import {
   StyleSheet,
 } from "react-native";
 
-import { Combat } from "../constants/combats";
+import { CombatSummary } from "../types/Combat";
 
 type CombatCardProps = {
-  combat: Combat;
+  combat: CombatSummary;
   onPress: () => void;
 };
 
@@ -19,10 +19,7 @@ export default function CombatCard({
   onPress,
 }: CombatCardProps) {
   return (
-    <Pressable
-      style={styles.card}
-      onPress={onPress}
-    >
+    <Pressable style={styles.card} onPress={onPress}>
       <View style={styles.content}>
         <Text style={styles.name}>
           {combat.name}
@@ -36,16 +33,14 @@ export default function CombatCard({
         </Text>
 
         <Text style={styles.monsters}>
-          {combat.monsterIds.length}{" "}
-          {combat.monsterIds.length === 1
+          {combat.monsterCount}{" "}
+          {combat.monsterCount === 1
             ? "monstro"
             : "monstros"}
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
-      </Text>
+      <Text style={styles.arrow}>›</Text>
     </Pressable>
   );
 }
@@ -53,59 +48,42 @@ export default function CombatCard({
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
-
     alignItems: "center",
-
     justifyContent: "space-between",
-
     backgroundColor: "#1a1a1a",
-
     borderWidth: 1,
-
     borderColor: "#333333",
-
     borderRadius: 10,
-
     padding: 16,
-
     marginBottom: 12,
   },
 
   content: {
     flex: 1,
-
     paddingRight: 10,
   },
 
   name: {
     color: "#c9a227",
-
     fontSize: 18,
-
     fontWeight: "bold",
-
     marginBottom: 6,
   },
 
   description: {
     color: "#cccccc",
-
     fontSize: 14,
-
     lineHeight: 20,
   },
 
   monsters: {
     color: "#888888",
-
     fontSize: 12,
-
     marginTop: 8,
   },
 
   arrow: {
     color: "#c9a227",
-
     fontSize: 30,
   },
 });
