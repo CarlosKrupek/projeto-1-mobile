@@ -21,22 +21,22 @@ import {
   useFocusEffect,
 } from "expo-router";
 
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+
 import {
   getSavedMonsters,
   removeSavedMonster,
+  updateCustomMonsterImage,
+  SavedMonster,
 } from "../database/monsterRepository";
-
-import { Monster } from "../types/Monster";
 
 import CreatureCard from "../components/CreatureCard";
 
 export default function MyMonstersScreen() {
-  const [monsters, setMonsters] = useState<Monster[]>([]);
-
+  const [monsters, setMonsters] = useState<SavedMonster[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [refreshing, setRefreshing] = useState(false);
-
   const [error, setError] = useState("");
 
   // Buscar monstros salvos no SQLite.
@@ -99,7 +99,6 @@ export default function MyMonstersScreen() {
   async function refreshMonsters() {
     try {
       setRefreshing(true);
-
       await loadMonsters();
     } finally {
       setRefreshing(false);
@@ -114,8 +113,204 @@ export default function MyMonstersScreen() {
     });
   }
 
-  // Confirmar remoção.
-  function confirmRemove(monster: Monster) {
+  // Copiar a imagem selecionada para o armazenamento permanente.
+  async function saveImageLocally(
+    sourceUri: string,
+    monsterId: string,
+    fileName?: string | null
+  ): Promise<string> {
+    if (!FileSystem.documentDirectory) {
+      throw new Error("O armazenamento local não está disponível.");
+    }
+
+    const directory = `${FileSystem.documentDirectory}monster-images/`;
+
+    await FileSystem.makeDirectoryAsync(directory, {
+      intermediates: true,
+    });
+
+    const extensionFromName = fileName?.match(/\.[a-zA-Z0-9]+$/)?.[0];
+    const extensionFromUri = sourceUri.match(/\.[a-zA-Z0-9]+(?=\?|$)/)?.[0];
+
+    const extension = extensionFromName || extensionFromUri || ".jpg";
+
+    const safeMonsterId = monsterId.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    const destinationUri =
+      `${directory}${safeMonsterId}_${Date.now()}${extension}`;
+
+    await FileSystem.copyAsync({
+      from: sourceUri,
+      to: destinationUri,
+    });
+
+    return destinationUri;
+  }
+
+  // Selecionar uma imagem da galeria.
+  async function chooseFromGallery(monster: SavedMonster) {
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        "Permissão necessária",
+        "Permita o acesso à galeria para escolher uma imagem."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets.length) {
+      return;
+    }
+
+    await saveMonsterImage(
+      monster,
+      result.assets[0].uri,
+      result.assets[0].fileName
+    );
+  }
+
+  // Tirar uma foto com a câmera.
+  async function takePhoto(monster: SavedMonster) {
+    const permission =
+      await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        "Permissão necessária",
+        "Permita o acesso à câmera para tirar uma foto."
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets.length) {
+      return;
+    }
+
+    await saveMonsterImage(
+      monster,
+      result.assets[0].uri,
+      result.assets[0].fileName
+    );
+  }
+
+  // Salvar a imagem escolhida e atualizar o cartão.
+  async function saveMonsterImage(
+    monster: SavedMonster,
+    sourceUri: string,
+    fileName?: string | null
+  ) {
+    let newImageUri: string | null = null;
+
+    try {
+      newImageUri = await saveImageLocally(
+        sourceUri,
+        monster.id,
+        fileName
+      );
+
+      await updateCustomMonsterImage(monster.id, newImageUri);
+
+      setMonsters((previous) =>
+        previous.map((item) =>
+          item.id === monster.id
+            ? { ...item, customImageUri: newImageUri! }
+            : item
+        )
+      );
+    } catch (err) {
+      if (newImageUri) {
+        await FileSystem.deleteAsync(newImageUri, {
+          idempotent: true,
+        }).catch(() => {});
+      }
+
+      Alert.alert(
+        "Erro",
+        err instanceof Error
+          ? err.message
+          : "Não foi possível salvar a imagem."
+      );
+    }
+  }
+
+  // Remover a imagem personalizada.
+  async function removeCustomImage(monster: SavedMonster) {
+    try {
+      await updateCustomMonsterImage(monster.id, null);
+
+      if (monster.customImageUri) {
+        await FileSystem.deleteAsync(monster.customImageUri, {
+          idempotent: true,
+        }).catch(() => {});
+      }
+
+      setMonsters((previous) =>
+        previous.map((item) =>
+          item.id === monster.id
+            ? { ...item, customImageUri: undefined }
+            : item
+        )
+      );
+    } catch {
+      Alert.alert(
+        "Erro",
+        "Não foi possível remover a imagem personalizada."
+      );
+    }
+  }
+
+  // Exibir as opções de imagem.
+  function showImageOptions(monster: SavedMonster) {
+    const options = [
+      {
+        text: "Escolher da galeria",
+        onPress: () => chooseFromGallery(monster),
+      },
+      {
+        text: "Tirar uma foto",
+        onPress: () => takePhoto(monster),
+      },
+    ];
+
+    if (monster.customImageUri) {
+      options.push({
+        text: "Remover imagem personalizada",
+        onPress: () => removeCustomImage(monster),
+      });
+    }
+
+    Alert.alert(
+      `Imagem de ${monster.name}`,
+      "Como deseja alterar a imagem desta criatura?",
+      [
+        ...options,
+        {
+          text: "Cancelar",
+          onPress: () => {},
+          style: "cancel" as const,
+        },
+      ]
+    );
+  }
+
+  // Confirmar remoção da criatura.
+  function confirmRemove(monster: SavedMonster) {
     Alert.alert(
       "Remover criatura",
       `Deseja remover ${monster.name} de Meus Monstros?`,
@@ -130,6 +325,13 @@ export default function MyMonstersScreen() {
           onPress: async () => {
             try {
               await removeSavedMonster(monster.id);
+
+              if (monster.customImageUri) {
+                await FileSystem.deleteAsync(
+                  monster.customImageUri,
+                  { idempotent: true }
+                ).catch(() => {});
+              }
 
               setMonsters((previous) =>
                 previous.filter((item) => item.id !== monster.id)
@@ -153,7 +355,6 @@ export default function MyMonstersScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -161,21 +362,16 @@ export default function MyMonstersScreen() {
             tintColor="#c9a227"
           />
         }
-
         ListHeaderComponent={
           <View style={styles.header}>
             <Pressable
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <Text style={styles.backText}>
-                ← Voltar
-              </Text>
+              <Text style={styles.backText}>← Voltar</Text>
             </Pressable>
 
-            <Text style={styles.title}>
-              Meus Monstros
-            </Text>
+            <Text style={styles.title}>Meus Monstros</Text>
 
             <Text style={styles.subtitle}>
               Monstros salvos para suas aventuras
@@ -186,7 +382,6 @@ export default function MyMonstersScreen() {
             </Text>
           </View>
         }
-
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             {loading ? (
@@ -206,9 +401,7 @@ export default function MyMonstersScreen() {
                   Erro ao carregar
                 </Text>
 
-                <Text style={styles.emptyText}>
-                  {error}
-                </Text>
+                <Text style={styles.emptyText}>{error}</Text>
 
                 <Pressable
                   style={styles.retryButton}
@@ -232,12 +425,13 @@ export default function MyMonstersScreen() {
             )}
           </View>
         }
-
         renderItem={({ item }) => (
           <CreatureCard
             creature={item}
+            customImageUri={item.customImageUri}
             onPress={() => openMonster(item.id)}
             onRemove={() => confirmRemove(item)}
+            onChangeImage={() => showImageOptions(item)}
           />
         )}
       />
